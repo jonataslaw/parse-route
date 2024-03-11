@@ -332,5 +332,60 @@ void main() {
         expect(parser.getSubRoutesFrom('/unknown'), isEmpty);
       });
     });
+
+    group('RouteMatcher - Complex Routes', () {
+      late ParseRoute parser;
+
+      setUp(() {
+        parser = ParseRoute();
+        parser.registerRouter('/shop/items/list/view/detail');
+        parser.registerRouter('/user/profile/settings/account/security');
+        parser.registerRouter('/admin/dashboard/reports/finance/summary');
+      });
+
+      test('matches a deeply nested route', () {
+        final result = parser.matchRoute('/shop/items/list/view/detail');
+        expect(result, isNotNull);
+        expect(result?.path, equals('/shop/items/list/view/detail'));
+      });
+
+      test('matches a route with deep nesting and extracts parameters', () {
+        parser.registerRouter('/project/:projectId/task/:taskId/detail');
+        final result = parser.matchRoute('/project/42/task/108/detail');
+        expect(
+            result?.parameters, equals({'projectId': '42', 'taskId': '108'}));
+      });
+
+      test(
+          'matches a route with deep nesting and extracts parameters and url parameters',
+          () {
+        parser.registerRouter('/project/:projectId/task/:taskId/detail');
+        final result =
+            parser.matchRoute('/project/42/task/108/detail?foo=bar&baz=qux');
+        expect(
+            result?.parameters, equals({'projectId': '42', 'taskId': '108'}));
+        expect(result?.urlParameters, equals({'foo': 'bar', 'baz': 'qux'}));
+      });
+
+      test(
+          'does not match a route when a segment is missing in a deeply nested route',
+          () {
+        expect(parser.matchRoute('/shop/items/list/view'), isNull);
+      });
+
+      test(
+          'matches a route with multiple url parameters in a deeply nested route',
+          () {
+        final result = parser.matchRoute(
+            '/user/profile/settings/account/security?foo=bar&baz=qux');
+        expect(result?.path, equals('/user/profile/settings/account/security'));
+        expect(result?.urlParameters, equals({'foo': 'bar', 'baz': 'qux'}));
+      });
+
+      test('does not match a route with incorrect ordering of segments', () {
+        expect(parser.matchRoute('/admin/dashboard/finance/reports/summary'),
+            isNull);
+      });
+    });
   });
 }
