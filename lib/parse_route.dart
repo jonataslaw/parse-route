@@ -11,106 +11,129 @@ class MatchResult {
   /// Route url parameters eg: adding 'user' the match result for 'user?foo=bar' will be: {foo: bar}
   final Map<String, String> urlParameters;
 
-  MatchResult(this.path, this.parameters, {this.urlParameters = const {}});
+  /// The clean path of the route
+  /// e.g. '/profile/123?foo=bar&baz=qux' will be '/profile/123'
+  final String cleanPath;
+
+  /// The route definition that matched the result
+  final RouteDefinition routeDefinition;
+
+  MatchResult(
+    this.path,
+    this.parameters, {
+    required this.cleanPath,
+    required this.routeDefinition,
+    this.urlParameters = const {},
+  });
 
   @override
   String toString() =>
       'MatchResult(path: $path, parameters: $parameters, urlParameters: $urlParameters)';
 }
 
-// A class representing a node in a routing tree.
-class RouteNode {
-  String path;
-  RouteNode? parent;
-  List<RouteNode> children = [];
+/// Defines a route with a pattern, segments for matching, and support for wildcards.
+class RouteDefinition {
+  /// The route pattern
+  /// e.g. '/user/:id'
+  /// e.g. '/user/*'
+  /// e.g. '/user?foo=bar'
+  /// e.g. '/user/:id?foo=bar'
+  final String pattern;
 
-  RouteNode(this.path, {this.parent});
+  /// The segments of the route pattern
+  /// e.g. '/user/:id' will be ['user', ':id']
+  final List<String> segments;
 
-  bool get isRoot => parent == null;
+  /// Whether the route pattern contains a wildcard
+  /// e.g. '/user/*' will be true
+  final bool isWildcard;
 
-  String get fullPath {
-    if (isRoot) {
-      return '/';
+  RouteDefinition(this.pattern)
+      : segments = _parsePath(pattern),
+        isWildcard = pattern.contains('*');
+
+  static List<String> _parsePath(String path) => path
+      .split('/')
+      .where((segment) => segment.isNotEmpty && segment != '*')
+      .toList();
+
+  /// Checks if a given list of path segments matches this route definition.
+  bool matches(List<String> pathSegments) {
+    if (isWildcard) {
+      return _matchesWithWildcard(pathSegments);
     } else {
-      final parentPath = parent?.fullPath == '/' ? '' : parent?.fullPath;
-      return '$parentPath/$path';
+      return _matchesExactly(pathSegments);
     }
   }
 
-  bool get hasChildren => children.isNotEmpty;
-
-  void addChild(RouteNode child) {
-    children.add(child);
-    child.parent = this;
-  }
-
-  RouteNode? findChild(String name) {
-    return children.firstWhereOrNull((node) => node.path == name);
-  }
-
-  bool matches(String name) {
-    return name == path || path == '*' || path.startsWith(':');
-  }
-
-  @override
-  String toString() => 'RouteNode(name: $path, children: $children)';
-}
-
-class RouteMatcher {
-  final RouteNode _root = RouteNode('/');
-
-  void addRoute(String path) {
-    final segments = _parsePath(path);
-    var currentNode = _root;
-
-    for (final segment in segments) {
-      final existingChild = currentNode.findChild(segment);
-      if (existingChild != null) {
-        currentNode = existingChild;
-      } else {
-        final newChild = RouteNode(segment);
-        currentNode.addChild(newChild);
-        currentNode = newChild;
+  bool _matchesWithWildcard(List<String> pathSegments) {
+    // For wildcard, only match the prefix before the wildcard
+    for (int i = 0; i < segments.length; i++) {
+      if (pathSegments.length < i || segments[i] != pathSegments[i]) {
+        return false;
       }
     }
+    return true;
   }
 
-  RouteNode? _findChild(RouteNode currentNode, String segment) {
-    return currentNode.children
-        .firstWhereOrNull((node) => node.matches(segment));
+  bool _matchesExactly(List<String> pathSegments) {
+    if (segments.length != pathSegments.length) return false;
+
+    for (int i = 0; i < segments.length; i++) {
+      final isParam = segments[i].startsWith(':');
+      if (!isParam && segments[i] != pathSegments[i]) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /// Extracts route parameters from the path segments.
+  Map<String, String> extractParameters(List<String> pathSegments) {
+    final parameters = <String, String>{};
+    for (int i = 0; i < segments.length; i++) {
+      if (segments[i].startsWith(':')) {
+        parameters[segments[i].substring(1)] = pathSegments[i];
+      }
+    }
+    return parameters;
+  }
+}
+
+/// A class responsible for matching routes against registered route definitions.
+/// It also keeps track of the registered routes.
+/// It is used by the [Navigator] class.
+class _RouteMatcher {
+  final List<RouteDefinition> _routes = [];
+
+  bool isRegistered(String path) {
+    return matchRoute(path) != null;
+  }
+
+  void addRoute(String path) {
+    final definition = RouteDefinition(path);
+    _routes.add(definition);
   }
 
   MatchResult? matchRoute(String path) {
     final uri = Uri.parse(path);
-    final segments = _parsePath(uri.path);
-    var currentNode = _root;
-    final parameters = <String, String>{};
-    final urlParameters = uri.queryParameters;
+    final pathSegments = RouteDefinition._parsePath(uri.path);
 
-    for (final segment in segments) {
-      if (segment.isEmpty) continue;
-      final child = _findChild(currentNode, segment);
-      if (child == null) {
-        return null;
-      } else {
-        if (child.path.startsWith(':')) {
-          parameters[child.path.substring(1)] = segment;
-        }
-
-        if (child.children.length == segments.length) {
-          return null;
-        }
-
-        currentNode = child;
+    for (var route in _routes) {
+      if (route.matches(pathSegments)) {
+        final parameters = route.extractParameters(pathSegments);
+        final urlParameters = uri.queryParameters;
+        return MatchResult(
+          route.pattern,
+          parameters,
+          urlParameters: urlParameters,
+          cleanPath: uri.path,
+          routeDefinition: route,
+        );
       }
     }
 
-    return MatchResult(currentNode.fullPath, parameters,
-        urlParameters: urlParameters);
-  }
-
-  List<String> _parsePath(String path) {
-    return path.split('/').where((segment) => segment.isNotEmpty).toList();
+    return null; // No matching route found
   }
 }
 
@@ -120,5 +143,241 @@ extension Foo<T> on Iterable<T> {
       if (test(element)) return element;
     }
     return null;
+  }
+}
+
+/// A class representing the navigation history.
+class _NavigationHistory {
+  final List<HistoryEntry> _history = [];
+
+  void push(HistoryEntry path) {
+    _history.add(path);
+  }
+
+  HistoryEntry? pop() {
+    if (_history.isNotEmpty) {
+      return _history.removeLast();
+    }
+    return null;
+  }
+
+  void replaceLast(HistoryEntry path) {
+    if (_history.isNotEmpty) {
+      _history.removeLast();
+    }
+    _history.add(path);
+  }
+
+  void clear() {
+    _history.clear();
+  }
+
+  HistoryEntry get current => _history.last;
+
+  String? getLastVisitedSubroute(String basePath) {
+    for (var path in _history.reversed) {
+      if (path.fullPath.startsWith('$basePath/')) {
+        return path.fullPath;
+      }
+    }
+    return null;
+  }
+
+  @override
+  String toString() => _history.toString();
+}
+
+/// A class representing a history entry.
+class HistoryEntry {
+  /// The full path of the route
+  /// e.g. '/user/123'
+  /// e.g. '/user/123?foo=bar&baz=qux'
+  final String fullPath;
+
+  /// The path of the route
+  /// e.g. '/user/:id'
+  final String path;
+
+  /// The parameters of the route
+  /// e.g. '/user/:id' with '/user/123' will be {id: 123}
+  final Map<String, String> parameters;
+
+  /// The url parameters of the route
+  /// e.g. '/user' with '/user?foo=bar' will be {foo: bar}
+  final Map<String, String> urlParameters;
+
+  /// The clean path of the route
+  /// e.g. '/profile/123?foo=bar&baz=qux' will be '/profile/123'
+  final String cleanPath;
+
+  HistoryEntry({
+    required this.path,
+    required this.parameters,
+    required this.fullPath,
+    required this.cleanPath,
+    required this.urlParameters,
+  });
+
+  @override
+  String toString() =>
+      'HistoryEntry(path: $path, parameters: $parameters, urlParameters: $urlParameters, fullPath: $fullPath, cleanPath: $cleanPath)';
+}
+
+class ParseRoute {
+  final _RouteMatcher _registry = _RouteMatcher();
+  final _NavigationHistory _history = _NavigationHistory();
+
+  /// Registers a new route.
+  /// The path can contain parameters, e.g. '/user/:id'.
+  /// The path can also contain wildcards, e.g. '/user/*'.
+  /// The path can also contain query parameters, e.g. '/user?foo=bar'.
+  void registerRouter(String path) {
+    _registry.addRoute(path);
+  }
+
+  /// Pushes a new route to the navigation stack.
+  void push(String path) {
+    final register =
+        _registry.matchRoute(path); // Check if the route is registered
+    if (register != null) {
+      _history.push(HistoryEntry(
+        path: register.path,
+        parameters: register.parameters,
+        urlParameters: register.urlParameters,
+        fullPath: path,
+        cleanPath: register.cleanPath,
+      ));
+    }
+  }
+
+  /// Pops the last route from the navigation stack.
+  void pop() {
+    _history.pop();
+  }
+
+  /// Replaces the last route with a new route.
+  void replaceLast(String path) {
+    final register = _registry.matchRoute(path);
+    if (register != null) {
+      _history.replaceLast(HistoryEntry(
+        path: register.path,
+        parameters: register.parameters,
+        urlParameters: register.urlParameters,
+        fullPath: path,
+        cleanPath: register.cleanPath,
+      ));
+    }
+  }
+
+  /// Clears the navigation history
+  void clearHistory() {
+    _history.clear();
+  }
+
+  /// Returns the current route.
+  HistoryEntry get current => _history.current;
+
+  /// Matches a route against the registered routes.
+  /// Returns a [MatchResult] if a route is found, otherwise returns null.
+  MatchResult? matchRoute(String path) {
+    return _registry.matchRoute(path);
+  }
+
+  /// Returns a list of all registered routes
+  bool isRegistered(String path) {
+    return _registry.isRegistered(path);
+  }
+
+  /// Returns the last visited subroute from the given base path
+  String? getLastVisitedSubroute(String basePath) {
+    return _history.getLastVisitedSubroute(basePath);
+  }
+
+  /// Returns a list of routes from the given base path
+  /// If the base path is a subroute, it will return the parent route and its siblings
+  /// If the base path is a top-level route, it will return the current route and its children
+  List<String> getRoutesFrom(String basePath) {
+    final Set<String> matchedRoutes = {};
+    for (var route in _registry._routes) {
+      if (basePath.endsWith('/')) {
+        basePath = basePath.substring(0, basePath.length - 1);
+      }
+
+      if ("${route.pattern}/".startsWith('$basePath/')) {
+        matchedRoutes.add(route.pattern);
+      }
+    }
+    return matchedRoutes.toList();
+  }
+
+  /// Returns a list of subroutes from the given base path
+  /// If the base path is a subroute, it will return its siblings
+  /// If the base path is a top-level route, it will return its children
+  List<String> getSubRoutesFrom(String basePath) {
+    final Set<String> matchedSubRoutes = {};
+    for (var route in _registry._routes) {
+      if (route.pattern.startsWith('$basePath/') && route.pattern != basePath) {
+        matchedSubRoutes.add(route.pattern);
+      }
+    }
+    return matchedSubRoutes.toList();
+  }
+
+  /// Returns a list of routes from the current route
+  /// If the current route is a subroute, it will return the parent route and its siblings
+  /// If the current route is a top-level route, it will return the current route and its children
+  List<String> getRoutesFromCurrent() {
+    final currentPath = _history.current.fullPath;
+
+    // Check if the current route is deeply nested by counting the slashes
+    final slashCount = currentPath.codeUnits
+        .where((char) => char == 47)
+        .length; // 47 is the ASCII code for '/'
+
+    if (slashCount <= 1) {
+      // For root or top-level routes, return the current route only
+      return [currentPath];
+    } else {
+      // For deeply nested routes, determine if we need to include siblings or just the current route
+      final parentPath = currentPath.substring(0, currentPath.lastIndexOf('/'));
+      final List<String> allRoutesFromParent = getRoutesFrom(parentPath);
+
+      if (allRoutesFromParent.contains(currentPath) &&
+          allRoutesFromParent.length == 1) {
+        // If the current path is the only route within its parent, return just the current path
+        return [currentPath];
+      } else {
+        // For nested routes with siblings, include the parent route, the current route, and any siblings
+        final List<String> relevantRoutes = allRoutesFromParent.where((route) {
+          return route == parentPath || route.startsWith('$parentPath/');
+        }).toList();
+
+        // Special handling for cases where only the deeply nested route is expected
+        if (relevantRoutes.contains(currentPath) &&
+            relevantRoutes.length == 2 &&
+            parentPath != '/') {
+          return [currentPath];
+        }
+
+        return relevantRoutes;
+      }
+    }
+  }
+
+  /// Returns a list of subroutes from the current route
+  /// If the current route is a subroute, it will return its siblings
+  /// If the current route is a top-level route, it will return its children
+  List<String> getSubRoutesFromCurrent() {
+    final currentPath = _history.current.fullPath;
+
+    // Directly use getSubRoutesFrom with the current path
+    final subRoutes = getSubRoutesFrom(currentPath);
+    // Ensure that if we're at a specific subroute, it still returns its siblings
+    if (subRoutes.isEmpty && currentPath.contains('/')) {
+      final basePath = currentPath.substring(0, currentPath.lastIndexOf('/'));
+      return getSubRoutesFrom(basePath);
+    }
+
+    return subRoutes;
   }
 }

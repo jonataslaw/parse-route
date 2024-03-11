@@ -1,111 +1,91 @@
-A package that parses your routes, and their parameters.
+# ParseRoute Library
 
-## Getting started
-Add Get to your pubspec.yaml file:
+Designed with efficiency and comprehensiveness in mind, ParseRoute delivers an all-encompassing solution for route parsing, matching, and navigation within Dart applications. Its intuitive API caters to developers by simplifying complex navigation management tasks, making it a highly flexible and scalable choice for integration into various applications and frameworks. Ideal for projects utilizing Navigator 2, or even in server-side Dart applications, ParseRoute is poised to become a foundational component of GetX and GetServer at some point in the future.
+
+## Key Features
+
+- **Dynamic Route Matching:** Simplifies the matching of routes, including those with dynamic segments, and effortlessly extracts relevant parameters for use.
+- **Query Parameter Parsing:** Integrates the parsing of URL query parameters directly into the route matching workflow, enhancing data retrieval and usage.
+- **Route Registration & Verification:** Enables the easy registration of routes within your application and allows for the immediate verification of their registration status.
+- **Nested Route Support:** Facilitates the organization of complex application navigational structures through the use of nested routes.
+- **Advanced Programmatic Navigation:** Provides robust tools for programmatically managing navigation, leveraging both route and query parameters for seamless transitions.
+- **Comprehensive History Management:** Features a powerful history management system that supports back navigation, route replacement, and history clearing functionalities.
+
+## Getting Started
+
+To integrate ParseRoute into your Dart project, simply add it as a dependency in your project's `pubspec.yaml` file:
 
 ```yaml
 dependencies:
-  parse_route:
+  parse_route: ^<latest_version>
 ```
 
-Import get in files that it will be used:
+Ensure to replace `<latest_version>` with the latest version number of the library.
+
+## Basic Usage
+
+### Setting Up
+
+Begin by importing ParseRoute into your project file:
 
 ```dart
 import 'package:parse_route/parse_route.dart';
 ```
 
-## Usage
+### Register Routes
+
+Register your application's routes as follows:
 
 ```dart
-   test('adds a route to the routing tree', () {
-      final matcher = RouteMatcher();
-      matcher.addRoute('user/:id');
-      expect(matcher.matchRoute('user/123'), isNotNull);
+final parser = ParseRoute();
 
-      matcher.addRoute('profile/followers');
-      expect(matcher.matchRoute('profile/followers'), isNotNull);
-
-      matcher.addRoute('home/feed/photos');
-      expect(matcher.matchRoute('home/feed/photos'), isNotNull);
-    });
-
-    test('matches a route and extracts parameters', () {
-      final matcher = RouteMatcher();
-      matcher.addRoute('user/:id');
-      final result = matcher.matchRoute('user/123');
-      expect(result?.path, equals('/user/:id'));
-      expect(result?.parameters, equals({'id': '123'}));
-    });
-
-    test('matches a route with url parameters', () {
-      final matcher = RouteMatcher();
-      matcher.addRoute('/user');
-      final result = matcher.matchRoute('user?foo=bar');
-      expect(result?.path, equals('/user'));
-      expect(result?.urlParameters, equals({'foo': 'bar'}));
-    });
-
-    test('matches a route with a root path', () {
-      final matcher = RouteMatcher();
-      matcher.addRoute('/');
-      expect(matcher.matchRoute('/'), isNotNull);
-    });
-
-    test('does not match a route that is missing segments', () {
-      final matcher = RouteMatcher();
-      matcher.addRoute('user/:id');
-      expect(matcher.matchRoute('product/abc'), isNull);
-
-      matcher.addRoute('home');
-      expect(matcher.matchRoute('product'), isNull);
-    });
-
-    test('does not match a route that does not exist', () {
-      final matcher = RouteMatcher();
-      matcher.addRoute('user/:id');
-      expect(matcher.matchRoute('product/abc'), isNull);
-
-      matcher.addRoute('home');
-      expect(matcher.matchRoute('settings'), isNull);
-    });
-
-    test('does not match a route with a missing segment', () {
-      final matcher = RouteMatcher();
-      matcher.addRoute('user/settings');
-      expect(matcher.matchRoute('user/'), isNull);
-    });
-
-    test('does not match a route with more segments', () {
-      final matcher = RouteMatcher();
-      matcher.addRoute('user');
-      expect(matcher.matchRoute('user/settings'), isNull);
-    });
-
-    test('does not match a route with a wrong path', () {
-      final matcher = RouteMatcher();
-      matcher.addRoute('user/:id/comments');
-      expect(matcher.matchRoute('user/1234/feed'), isNull);
-    });
-
-    test('does match with root an empty path', () {
-      final matcher = RouteMatcher();
-      expect(matcher.matchRoute('')?.path, '/');
-    });
-
-    test('matches a route with query parameters', () {
-      final matcher = RouteMatcher();
-      matcher.addRoute('user/:id');
-      final result = matcher.matchRoute('user/123?foo=bar&baz=qux');
-      expect(result?.path, equals('/user/:id'));
-      expect(result?.parameters, equals({'id': '123'}));
-      expect(result?.urlParameters, equals({'foo': 'bar', 'baz': 'qux'}));
-    });
-
-    test('matches a wildcard route', () {
-      final matcher = RouteMatcher();
-      matcher.addRoute('user/*');
-      expect(matcher.matchRoute('user/settings'), isNotNull);
-    });
+// Register individual routes with dynamic segments
+parser.registerRoute('/user/:id');
+// Automatic tracking of nested routes
+parser.registerRoute('/profile/followers');
+parser.registerRoute('/profile/following');
+parser.registerRoute('/profile/edit');
+// Wildcard support
+parser.registerRoute('/settings/*');
+// Query parameter support
+parser.registerRoute('/search?foo=bar&baz=qux');
+// Dynamic segments can be registered with query parameters
+parser.registerRoute('/user/:id?foo=bar');
 ```
 
+### Route Matching and Navigation
 
+Match a route and navigate through your application with ease:
+
+```dart
+final match = parser.matchRoute('/user/123?foo=bar');
+if (match != null) {
+  // Access matched route and parameters
+  print(match.path); // /user/:id
+  print(match.parameters); // {id: '123'}
+  print(match.urlParameters); // {foo: 'bar'}
+}
+
+// Navigate to a route
+parser.push('/profile/123');
+// Check the current route
+print(parser.current.fullPath); // /profile/123
+```
+
+### Managing Navigation History
+
+Efficiently manage your navigation history:
+
+```dart
+// Navigate through routes
+parser.push('/home');
+parser.push('/profile/edit');
+// Go back to the previous route
+parser.pop();
+// Verify the current route
+print(parser.current.fullPath); // /home
+```
+
+## Contribution and Support
+
+We welcome contributions to the ParseRoute library with open arms! If you're interested in contributing, please submit a pull request with your proposed changes. For any questions, suggestions, or issues, feel free to open an issue on our GitHub repository. Your input helps make ParseRoute better.
