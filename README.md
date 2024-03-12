@@ -3,7 +3,7 @@
 Designed with efficiency and comprehensiveness in mind, ParseRoute delivers an all-encompassing solution for route parsing, matching, and navigation within Dart applications. Its intuitive API caters to developers by simplifying complex navigation management tasks, making it a highly flexible and scalable choice for integration into various applications and frameworks. Ideal for projects utilizing Navigator 2, or even in server-side Dart applications, ParseRoute is poised to become a foundational component of GetX and GetServer at some point in the future.
 
 [![pub package](https://img.shields.io/pub/v/parse_route.svg?label=parse_route&color=blue)](https://pub.dev/packages/parse_route)
-[![codecov](https://codecov.io/gh/jonataslaw/parse_route/branch/main/graph/badge.svg?token=5KP04NZWY5)](https://codecov.io/gh/jonataslaw/parse_route)
+[![codecov](https://codecov.io/github/jonataslaw/parse-route/graph/badge.svg?token=5KP04NZWY5)](https://codecov.io/github/jonataslaw/parse-route)
 
 ## Key Features
 
