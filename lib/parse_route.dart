@@ -5,15 +5,15 @@ class MatchResult {
   /// Route found that matches the result
   final String path;
 
+  /// The clean path of the route
+  /// e.g. '/profile/123?foo=bar&baz=qux' will be '/profile/123'
+  final String cleanPath;
+
   /// Route parameters eg: adding 'user/:id' the match result for 'user/123' will be: {id: 123}
   final Map<String, String> parameters;
 
   /// Route url parameters eg: adding 'user' the match result for 'user?foo=bar' will be: {foo: bar}
   final Map<String, String> urlParameters;
-
-  /// The clean path of the route
-  /// e.g. '/profile/123?foo=bar&baz=qux' will be '/profile/123'
-  final String cleanPath;
 
   /// The route definition that matched the result
   final RouteDefinition routeDefinition;
@@ -28,7 +28,7 @@ class MatchResult {
 
   @override
   String toString() =>
-      'MatchResult(path: $path, parameters: $parameters, urlParameters: $urlParameters)';
+      'MatchResult(path: $path, cleanPath: $cleanPath, parameters: $parameters, urlParameters: $urlParameters)';
 }
 
 /// Defines a route with a pattern, segments for matching, and support for wildcards.
@@ -102,7 +102,7 @@ class RouteDefinition {
 
 /// A class responsible for matching routes against registered route definitions.
 /// It also keeps track of the registered routes.
-/// It is used by the [Navigator] class.
+/// It is used by the [ParseRoute] class.
 class _RouteMatcher {
   final List<RouteDefinition> _routes = [];
 
@@ -134,15 +134,6 @@ class _RouteMatcher {
     }
 
     return null; // No matching route found
-  }
-}
-
-extension Foo<T> on Iterable<T> {
-  T? firstWhereOrNull(bool Function(T element) test) {
-    for (var element in this) {
-      if (test(element)) return element;
-    }
-    return null;
   }
 }
 
@@ -184,7 +175,9 @@ class _NavigationHistory {
   }
 
   @override
-  String toString() => _history.toString();
+  String toString() => _history.map((e) {
+        return e.fullPath;
+      }).join(' -> ');
 }
 
 /// A class representing a history entry.
@@ -379,5 +372,10 @@ class ParseRoute {
     }
 
     return subRoutes;
+  }
+
+  /// Returns the navigation history
+  String getHistoryDebug() {
+    return _history.toString();
   }
 }

@@ -87,6 +87,30 @@ void main() {
       parser.registerRouter('user/*');
       expect(parser.matchRoute('user/settings'), isNotNull);
     });
+
+    test('MatchResult toString method provides correct string representation',
+        () {
+      final parser = ParseRoute();
+      parser.registerRouter('/user/:id');
+      final matchResult = parser.matchRoute('/user/123?query=value');
+      assert(matchResult != null);
+      final expectedString =
+          'MatchResult(path: /user/:id, cleanPath: /user/123, parameters: {id: 123}, urlParameters: {query: value})';
+
+      expect(matchResult.toString(), equals(expectedString));
+    });
+
+    test('HistoryEntry toString method provides correct string representation',
+        () {
+      final parseRoute = ParseRoute();
+      parseRoute.registerRouter('/user/:id');
+      parseRoute.push('/user/123?query=value');
+      final historyEntry = parseRoute.current;
+      final expectedString =
+          'HistoryEntry(path: /user/:id, parameters: {id: 123}, urlParameters: {query: value}, fullPath: /user/123?query=value, cleanPath: /user/123)';
+
+      expect(historyEntry.toString(), equals(expectedString));
+    });
   });
   group('Navigator', () {
     late ParseRoute parser;
@@ -123,7 +147,7 @@ void main() {
         final value = parser.matchRoute('/profile/edit');
         print(value);
         expect(parser.isRegistered('/profile/edit'), isTrue);
-        // expect(parser.isRegistered('/profile/feed'), isTrue);
+        expect(parser.isRegistered('/profile/feed'), isTrue);
       });
     });
 
@@ -245,6 +269,24 @@ void main() {
             ]));
       });
 
+      test('Test special handling for deeply nested routes', () {
+        // Initialize ParseRoute
+        final parseRoute = ParseRoute();
+
+        // Register routes
+        parseRoute.registerRouter('/product');
+        parseRoute.registerRouter('/product/detail');
+
+        // Simulate navigating to the deeply nested route
+        parseRoute.push('/product/detail');
+
+        // Call getRoutesFromCurrent to trigger the special handling
+        final routes = parseRoute.getRoutesFromCurrent();
+
+        // Verify the output matches expected behavior
+        expect(routes, equals(['/product/detail']));
+      });
+
       test('getSubRoutesFromCurrent returns subroutes from the current route',
           () {
         parser.push('/profile');
@@ -300,13 +342,26 @@ void main() {
         parser.push('/home');
         parser.push('/profile/edit');
         parser.push('/profile/123');
+        parser.push('/settings');
 
         expect(
             parser.getLastVisitedSubroute('/profile'), equals('/profile/123'));
 
         parser.pop();
+        parser.pop();
+        parser.push('/settings');
         expect(
             parser.getLastVisitedSubroute('/profile'), equals('/profile/edit'));
+      });
+
+      test('getHistoryDebug returns the history as a string', () {
+        parser.push('/home');
+        parser.push('/profile/edit');
+        parser.push('/profile/123');
+        parser.push('/settings');
+
+        expect(parser.getHistoryDebug(),
+            equals('/home -> /profile/edit -> /profile/123 -> /settings'));
       });
     });
 
