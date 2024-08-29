@@ -82,6 +82,14 @@ void main() {
       expect(result?.urlParameters, equals({'foo': 'bar', 'baz': 'qux'}));
     });
 
+    test('matches a route with multiple parameters', () {
+      final parser = ParseRoute();
+      parser.registerRouter('/user/:id/comments/:commentId');
+      final result = parser.matchRoute('/user/123/comments/456');
+      expect(result?.path, equals('/user/:id/comments/:commentId'));
+      expect(result?.parameters, equals({'id': '123', 'commentId': '456'}));
+    });
+
     test('matches a wildcard route', () {
       final parser = ParseRoute();
       parser.registerRouter('user/*');
@@ -365,6 +373,205 @@ void main() {
       });
     });
 
+    group('ParseRoute with RouteListener', () {
+      late ParseRoute parser;
+
+      setUp(() {
+        parser = ParseRoute();
+        parser.registerRouter('/');
+        parser.registerRouter('/home');
+        parser.registerRouter('/home/profile');
+        parser.registerRouter('/home/settings');
+        parser.registerRouter('/home/user');
+        parser.registerRouter('/home/user/:id');
+        parser.registerRouter('/about');
+        parser.registerRouter('/about/team');
+      });
+
+      test('root listener receives all changes', () {
+        final changes = <String>[];
+        final types = <RouteChangeType>[];
+        parser.addListener('/', (newRoute, oldRoute, type) {
+          changes.add(newRoute.fullPath);
+          types.add(type);
+        });
+
+        parser.push('/home');
+        parser.push('/home/profile');
+        parser.pop();
+        parser.replaceLast('/about');
+
+        expect(changes, equals(['/home', '/home/profile', '/home', '/about']));
+        expect(
+            types,
+            equals([
+              RouteChangeType.push,
+              RouteChangeType.push,
+              RouteChangeType.pop,
+              RouteChangeType.replace
+            ]));
+      });
+
+      test('specific listener only receives relevant changes', () {
+        final homeChanges = <String>[];
+        parser.addListener('/home', (newRoute, oldRoute, type) {
+          homeChanges.add(newRoute.fullPath);
+        });
+
+        parser.push('/home');
+        parser.push('/home/profile');
+        parser.push('/home/settings');
+        parser.push('/about');
+        parser.pop();
+
+        expect(
+            homeChanges,
+            equals([
+              '/home',
+              '/home/profile',
+              '/home/settings',
+              '/home/settings'
+            ]));
+      });
+
+      test('more specific listener overrides less specific', () {
+        final homeChanges = <String>[];
+        final profileChanges = <String>[];
+
+        parser.addListener('/home', (newRoute, oldRoute, type) {
+          homeChanges.add(newRoute.fullPath);
+        });
+        parser.addListener('/home/profile', (newRoute, oldRoute, type) {
+          profileChanges.add(newRoute.fullPath);
+        });
+
+        parser.push('/home');
+        parser.push('/home/profile');
+        parser.push('/home/settings');
+
+        expect(homeChanges, equals(['/home', '/home/settings']));
+        expect(profileChanges, equals(['/home/profile']));
+      });
+
+       test('listener receives correct routes with parameters', () {
+        final oldRoutes = <String?>[];
+        parser.addListener('/', (newRoute, oldRoute, type) {
+          oldRoutes.add(oldRoute?.fullPath);
+        });
+
+        parser.push('/home');
+        parser.push('/about');
+        parser.pop();
+
+        expect(oldRoutes, equals([null, '/home', '/about']));
+      });
+
+      test('listenToAll receives all changes regardless of path', () {
+        final allChanges = <String>[];
+        parser.addListener('/', (newRoute, oldRoute, type) {
+          allChanges.add(newRoute.fullPath);
+        }, listenToAll: true);
+
+        parser.push('/home');
+        parser.push('/home/profile');
+        parser.push('/about');
+
+        expect(allChanges, equals(['/home', '/home/profile', '/about']));
+      });
+
+      test('removeListener stops notifications', () {
+        final changes = <String>[];
+        parser.addListener('/home', (newRoute, oldRoute, type) {
+          changes.add(newRoute.fullPath);
+        });
+
+        parser.push('/home');
+        parser.push('/home/profile');
+
+        parser.removeListener('/home');
+
+        parser.push('/home/settings');
+
+        expect(changes, equals(['/home', '/home/profile']));
+      });
+
+      test('listeners receive correct old routes', () {
+        final oldRoutes = <String?>[];
+        parser.addListener('/', (newRoute, oldRoute, type) {
+          oldRoutes.add(oldRoute?.fullPath);
+        });
+
+        parser.push('/home');
+        parser.push('/about');
+        parser.pop();
+
+        expect(oldRoutes, equals([null, '/home', '/about']));
+      });
+
+      test('listeners receive correct RouteChangeType', () {
+        final changeTypes = <RouteChangeType>[];
+        parser.addListener('/', (newRoute, oldRoute, type) {
+          changeTypes.add(type);
+        });
+
+        parser.push('/home');
+        parser.push('/about');
+        parser.pop();
+        parser.replaceLast('/home/profile');
+
+        expect(
+            changeTypes,
+            equals([
+              RouteChangeType.push,
+              RouteChangeType.push,
+              RouteChangeType.pop,
+              RouteChangeType.replace
+            ]));
+      });
+
+      test('multiple listeners with different paths', () {
+        final homeChanges = <String>[];
+        final aboutChanges = <String>[];
+
+        parser.addListener('/home', (newRoute, oldRoute, type) {
+          homeChanges.add(newRoute.fullPath);
+        });
+        parser.addListener('/about', (newRoute, oldRoute, type) {
+          aboutChanges.add(newRoute.fullPath);
+        });
+
+        parser.push('/home');
+        parser.push('/home/profile');
+        parser.push('/about');
+        parser.push('/about/team');
+
+        expect(homeChanges, equals(['/home', '/home/profile']));
+        expect(aboutChanges, equals(['/about', '/about/team']));
+      });
+
+      test('listener receives correct parameters', () {
+        Map<String, String>? capturedParams;
+        parser.registerRouter('/user/:id');
+        parser.addListener('/user', (newRoute, oldRoute, type) {
+          capturedParams = newRoute.parameters;
+        });
+
+        parser.push('/user/123');
+
+        expect(capturedParams, equals({'id': '123'}));
+      });
+
+      test('listener receives correct URL parameters', () {
+        Map<String, String>? capturedUrlParams;
+        parser.addListener('/home', (newRoute, oldRoute, type) {
+          capturedUrlParams = newRoute.urlParameters;
+        });
+
+        parser.push('/home?key=value&foo=bar');
+
+        expect(capturedUrlParams, equals({'key': 'value', 'foo': 'bar'}));
+      });
+    });
     group('Error Handling', () {
       test('returns null when matching an unregistered route', () {
         expect(parser.matchRoute('/unknown'), isNull);
