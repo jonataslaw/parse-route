@@ -165,6 +165,8 @@ class _NavigationHistory {
 
   HistoryEntry get current => _history.last;
 
+  bool isEmpty() => _history.isEmpty;
+
   String? getLastVisitedSubroute(String basePath) {
     for (var path in _history.reversed) {
       if (path.fullPath.startsWith('$basePath/')) {
@@ -216,9 +218,58 @@ class HistoryEntry {
       'HistoryEntry(path: $path, parameters: $parameters, urlParameters: $urlParameters, fullPath: $fullPath, cleanPath: $cleanPath)';
 }
 
+typedef RouteChangeCallback = void Function(
+    HistoryEntry newRoute, HistoryEntry? oldRoute, RouteChangeType type);
+
+class RouteListener {
+  final String path;
+  final RouteChangeCallback callback;
+  final bool listenToAll;
+
+  RouteListener(this.path, this.callback, {this.listenToAll = false});
+}
+
+class _RouterNotifier {
+  final List<RouteListener> _listeners = [];
+
+  void addListener(String path, RouteChangeCallback callback,
+      {bool listenToAll = false}) {
+    _listeners.add(RouteListener(path, callback, listenToAll: listenToAll));
+  }
+
+  void removeListener(String path) {
+    _listeners.removeWhere((listener) => listener.path == path);
+  }
+
+  void notifyListeners(
+      HistoryEntry newRoute, HistoryEntry? oldRoute, RouteChangeType type) {
+    for (var listener in _listeners) {
+      if (listener.listenToAll) {
+        listener.callback(newRoute, oldRoute, type);
+      } else if (newRoute.fullPath.startsWith(listener.path)) {
+        bool shouldNotify = true;
+        for (var otherListener in _listeners) {
+          if (otherListener != listener &&
+              newRoute.fullPath.startsWith(otherListener.path) &&
+              otherListener.path.length > listener.path.length) {
+            shouldNotify = false;
+            break;
+          }
+        }
+        if (shouldNotify) {
+          listener.callback(newRoute, oldRoute, type);
+        }
+      }
+    }
+  }
+}
+
+enum RouteChangeType { push, pop, replace }
+
 class ParseRoute {
   final _RouteMatcher _registry = _RouteMatcher();
   final _NavigationHistory _history = _NavigationHistory();
+  final _RouterNotifier _notifier = _RouterNotifier();
 
   /// Registers a new route.
   /// The path can contain parameters, e.g. '/user/:id'.
@@ -228,8 +279,26 @@ class ParseRoute {
     _registry.addRoute(path);
   }
 
+  /// Adds a listener to the router.
+  /// The listener will be called whenever the route changes.
+  /// If [listenToAll] is true, the listener will be called for all routes.
+  /// If [listenToAll] is false, the listener will be called only for the specified route.
+  /// The [callback] function will be called with the new route and the old route.
+  /// The old route will be null if there is no previous route.
+  void addListener(String path, RouteChangeCallback callback,
+      {bool listenToAll = false}) {
+    _notifier.addListener(path, callback, listenToAll: listenToAll);
+  }
+
+  /// Removes a listener from the router.
+  /// The listener will no longer be called when the route changes.
+  void removeListener(String path) {
+    _notifier.removeListener(path);
+  }
+
   /// Pushes a new route to the navigation stack.
   void push(String path) {
+    final oldRoute = _oldRoute;
     final register =
         _registry.matchRoute(path); // Check if the route is registered
     if (register != null) {
@@ -241,15 +310,24 @@ class ParseRoute {
         cleanPath: register.cleanPath,
       ));
     }
+    _notifier.notifyListeners(_history.current, oldRoute, RouteChangeType.push);
   }
 
   /// Pops the last route from the navigation stack.
   void pop() {
+    final oldRoute = _oldRoute;
     _history.pop();
+    if (_history.current != oldRoute) {
+      _notifier.notifyListeners(
+          _history.current, oldRoute, RouteChangeType.pop);
+    }
   }
+
+  HistoryEntry? get _oldRoute => _history.isEmpty() ? null : _history.current;
 
   /// Replaces the last route with a new route.
   void replaceLast(String path) {
+    final oldRoute = _oldRoute;
     final register = _registry.matchRoute(path);
     if (register != null) {
       _history.replaceLast(HistoryEntry(
@@ -260,6 +338,8 @@ class ParseRoute {
         cleanPath: register.cleanPath,
       ));
     }
+    _notifier.notifyListeners(
+        _history.current, oldRoute, RouteChangeType.replace);
   }
 
   /// Clears the navigation history

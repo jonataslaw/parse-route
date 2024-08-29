@@ -1,15 +1,15 @@
 name: parse_route
 description: All-encompassing solution for route parsing, matching, and navigation within Dart applications
-version: 2.0.0
-homepage: https://github.com/jonataslaw/parse_route
+version: 2.1.0
+homepage: https://github.com/jonataslaw/parse-route
 
 environment:
-  sdk: ">=2.19.2 <4.0.0"
+  sdk: ">=3.0.0 <4.0.0"
 
 dependencies:
 
 dev_dependencies:
-  test: ^1.23.1
-  lints: ^3.0.0
+  test: ^1.25.8
+  lints: ^4.0.0
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
